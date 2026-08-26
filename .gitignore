@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Gateway state — contains the agent shared secret, VAPID private key and
+# device token hashes. Lives in %USERPROFILE%\.agw by default; this covers the
+# case where AGW_HOME is pointed inside the repo.
+.agw/
+.agw-dev/
+*.agw-backup
+
+# Machine-specific: holds absolute paths to locally installed tools
+.claude/settings.json
+.claude/settings.local.json
+.claude/launch.json
+
+# Generated
+graphify-out/
+walkaway-demo/
+*.log
+*.tmp
+*.tsbuildinfo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

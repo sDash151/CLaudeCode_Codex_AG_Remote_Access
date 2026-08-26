@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Approvals</title>
+<!-- viewport-fit=cover so the layout respects the iPhone safe areas -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Approvals">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Connection state is always visible. If the phone cannot reach the laptop,
+     the user must be able to tell at a glance that nothing is being approved. -->
+<div id="conn" class="conn conn--unknown" role="status" aria-live="polite">
+  <span class="conn__dot"></span><span id="conn-text">Connecting…</span>
+</div>
+
+<!-- ------------------------------------------------------------ pairing -->
+<section id="view-pair" class="view">
+  <header class="hero">
+    <h1>Agent Approvals</h1>
+    <p class="hero__sub">Pair this iPhone with your laptop’s approval gateway.</p>
+  </header>
+  <form id="pair-form" class="card">
+    <label for="pair-code">Pairing code</label>
+    <input id="pair-code" inputmode="latin" autocapitalize="characters" autocomplete="one-time-code"
+           spellcheck="false" placeholder="ABCD-EFGH" maxlength="9" required>
+    <label for="pair-label">Device name</label>
+    <input id="pair-label" value="iPhone" maxlength="40" autocomplete="off">
+    <button type="submit" class="btn btn--primary">Pair device</button>
+    <p id="pair-error" class="error" hidden></p>
+    <p class="hint">Run <code>npm run pair</code> on the laptop to get a code.
+       Codes expire and can be used once.</p>
+  </form>
+</section>
+
+<!-- ------------------------------------------------------------ approvals -->
+<section id="view-main" class="view" hidden>
+  <header class="topbar">
+    <h1>Approvals</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab tab--on" data-tab="pending" role="tab">Pending</button>
+      <button class="tab" data-tab="history" role="tab">History</button>
+    </nav>
+  </header>
+
+  <div id="push-nudge" class="notice" hidden>
+    <p><strong>Enable notifications</strong> to be alerted when an agent asks for permission.</p>
+    <button id="push-enable" class="btn btn--ghost">Enable notifications</button>
+    <p class="hint" id="push-hint"></p>
+  </div>
+
+  <div id="tab-pending" class="tabpanel">
+    <ul id="pending-list" class="list"></ul>
+    <p id="pending-empty" class="empty">No pending approvals.<br><span class="empty__sub">You’ll be notified when an agent asks for permission.</span></p>
+  </div>
+
+  <div id="tab-history" class="tabpanel" hidden>
+    <ul id="history-list" class="list list--compact"></ul>
+  </div>
+</section>
+
+<!-- HIGH-risk confirmation. A second, deliberate tap — never a default action. -->
+<div id="confirm" class="sheet" hidden>
+  <div class="sheet__panel">
+    <h2 id="confirm-title">Confirm approval</h2>
+    <p class="sheet__risk"><span class="pill pill--HIGH">HIGH RISK</span></p>
+    <pre id="confirm-cmd" class="cmd"></pre>
+    <p id="confirm-meta" class="meta"></p>
+    <div class="sheet__actions">
+      <button id="confirm-cancel" class="btn btn--ghost">Cancel</button>
+      <button id="confirm-go" class="btn btn--danger">Yes, approve</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

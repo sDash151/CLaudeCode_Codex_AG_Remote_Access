@@ -1,0 +1,199 @@
+/* Agent Approvals — mobile-first, built for one-handed use on an iPhone.
+   Design intent: this is a security surface, so the exact command must be the
+   most legible thing on screen, and Approve must never be easier to hit by
+   accident than Deny. */
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1c2129;
+  --line: #2a323d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --low: #3fb950;
+  --medium: #d29922;
+  --high: #f85149;
+  --accent: #58a6ff;
+  --radius: 14px;
+  /* Respect the notch / home indicator. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* An explicit `display` on a class beats the UA's [hidden] rule, which silently
+   left the HIGH-risk confirmation sheet visible on load. Make `hidden` win. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  /* Prevent iOS from auto-zooming form fields. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body { padding: calc(var(--safe-top) + 44px) 16px calc(var(--safe-bottom) + 24px); }
+
+/* ---------------------------------------------------- connection banner -- */
+.conn {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 16px 8px;
+  font-size: 13px; font-weight: 600;
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.conn__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.conn--live    { background: rgba(63,185,80,.14);  color: var(--low); }
+.conn--live .conn__dot    { background: var(--low); }
+.conn--offline { background: rgba(248,81,73,.16);  color: var(--high); }
+.conn--offline .conn__dot { background: var(--high); }
+.conn--unknown { background: var(--surface); color: var(--muted); }
+.conn--unknown .conn__dot { background: var(--muted); }
+
+/* ------------------------------------------------------------- headings -- */
+.hero { padding: 24px 0 8px; }
+.hero h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
+.hero__sub { margin: 0; color: var(--muted); }
+
+.topbar { padding: 8px 0 4px; }
+.topbar h1 { margin: 0 0 12px; font-size: 24px; letter-spacing: -.02em; }
+
+.tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 10px; }
+.tab {
+  flex: 1; padding: 9px 8px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--muted);
+  font: inherit; font-size: 14px; font-weight: 600;
+}
+.tab--on { background: var(--surface-2); color: var(--text); }
+
+/* ---------------------------------------------------------------- cards -- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px; margin: 16px 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.card label { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.card input {
+  /* 17px avoids iOS input zoom. */
+  font: 17px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 13px 14px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); text-transform: uppercase;
+}
+.card #pair-label { text-transform: none; font-family: inherit; }
+.card input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --------------------------------------------------------- request list -- */
+.list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.req {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: var(--radius); padding: 14px; overflow: hidden;
+}
+.req--LOW    { border-left-color: var(--low); }
+.req--MEDIUM { border-left-color: var(--medium); }
+.req--HIGH   { border-left-color: var(--high); }
+
+.req__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.req__agent { font-weight: 700; font-size: 15px; }
+.req__spacer { flex: 1; }
+
+.pill {
+  font-size: 11px; font-weight: 800; letter-spacing: .06em;
+  padding: 3px 8px; border-radius: 999px; text-transform: uppercase;
+}
+.pill--LOW    { background: rgba(63,185,80,.16);  color: var(--low); }
+.pill--MEDIUM { background: rgba(210,153,34,.16); color: var(--medium); }
+.pill--HIGH   { background: rgba(248,81,73,.18);  color: var(--high); }
+
+/* The exact command. Wrapped, never truncated — the user must see what they
+   are approving in full. */
+.cmd {
+  margin: 0 0 10px; padding: 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.meta { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--text); font-weight: 600; }
+.meta__row { display: flex; gap: 6px; }
+.meta__row dt { flex: none; min-width: 62px; color: var(--muted); }
+.meta__row dd { margin: 0; word-break: break-all; }
+.reasons { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+
+.countdown { font-variant-numeric: tabular-nums; font-weight: 600; }
+.countdown--soon { color: var(--medium); }
+.countdown--critical { color: var(--high); }
+
+/* --------------------------------------------------------------- buttons -- */
+.actions { display: flex; gap: 10px; margin-top: 12px; }
+.btn {
+  flex: 1; min-height: 50px; padding: 13px 16px;
+  border: 1px solid var(--line); border-radius: 12px;
+  font: inherit; font-size: 16px; font-weight: 700;
+  background: var(--surface-2); color: var(--text);
+}
+.btn:active { transform: scale(.985); }
+.btn:disabled { opacity: .45; }
+/* Deny is listed first and styled as the safe/neutral path. */
+.btn--deny    { background: rgba(248,81,73,.12); border-color: rgba(248,81,73,.4); color: #ffb4ae; }
+.btn--approve { background: rgba(63,185,80,.14); border-color: rgba(63,185,80,.45); color: #7ee787; }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #041225; }
+.btn--danger  { background: var(--high); border-color: var(--high); color: #1a0503; }
+.btn--ghost   { background: transparent; color: var(--muted); }
+
+/* --------------------------------------------------------------- states -- */
+.empty { text-align: center; color: var(--muted); padding: 44px 12px; }
+.empty__sub { font-size: 14px; opacity: .75; }
+.error { color: var(--high); font-size: 14px; margin: 4px 0 0; }
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.hint code { background: var(--surface-2); padding: 2px 5px; border-radius: 5px; font-size: 12px; }
+
+.notice {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px; margin: 14px 0;
+}
+.notice p { margin: 0 0 10px; font-size: 14px; }
+
+/* Decision result banner inside a card once resolved. */
+.outcome { margin-top: 10px; padding: 11px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+.outcome--approved { background: rgba(63,185,80,.14); color: #7ee787; }
+.outcome--denied   { background: rgba(248,81,73,.14); color: #ffb4ae; }
+.outcome--expired  { background: rgba(139,148,158,.16); color: var(--muted); }
+
+/* ---------------------------------------------------- confirmation sheet -- */
+.sheet {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(1,4,9,.72); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-end;
+}
+.sheet__panel {
+  width: 100%;
+  background: var(--surface); border-top: 3px solid var(--high);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 16px calc(var(--safe-bottom) + 20px);
+}
+.sheet__panel h2 { margin: 0 0 10px; font-size: 20px; }
+.sheet__risk { margin: 0 0 12px; }
+.sheet__actions { display: flex; gap: 10px; margin-top: 16px; }
+
+/* History rows are denser: the command still shown, but unstyled as code. */
+.list--compact .req { padding: 12px; }
+.hist__top { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.hist__event { font-weight: 700; }
+.hist__time { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.hist__cmd {
+  font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted); margin: 6px 0 0;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active { transform: none; }
+}

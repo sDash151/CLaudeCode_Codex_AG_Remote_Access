@@ -1,0 +1,25 @@
+{
+  "name": "agent-approval-gateway",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "license": "MIT",
+  "description": "Secure remote approval gateway for Claude Code, Codex CLI and Antigravity. Approve or deny agent permission requests from an iPhone PWA.",
+  "bin": {
+    "agw": "src/cli/agw.js"
+  },
+  "scripts": {
+    "start": "node src/cli/agw.js start",
+    "stop": "node src/cli/agw.js stop",
+    "status": "node src/cli/agw.js status",
+    "pair": "node src/cli/agw.js pair",
+    "install-hooks": "node src/cli/agw.js install-hooks",
+    "test": "node --test \"tests/*.test.js\"",
+    "test:live-codex": "node tests/live/codex-e2e.js"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
