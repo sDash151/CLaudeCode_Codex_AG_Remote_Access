@@ -17,7 +17,7 @@
  * Because Claude supports "allow", a remote approval here fully satisfies the
  * permission request without a second local prompt.
  */
-const { pathsFromToolInput, projectNameFor, summarise } = require('../shared/hook-client');
+const { pathsFromToolInput, projectNameFor, summarise, describeAction } = require('../shared/hook-client');
 
 const id = 'claude';
 const displayName = 'Claude Code';
@@ -42,6 +42,9 @@ function parse(raw) {
   const command = typeof toolInput.command === 'string' ? toolInput.command : null;
   const paths = pathsFromToolInput(toolInput);
   const cwd = j.cwd || null;
+  
+  // Claude Code provides a description field - use it if available, otherwise generate one
+  const claudeDescription = typeof toolInput.description === 'string' ? toolInput.description : null;
 
   return {
     ok: true,
@@ -60,6 +63,8 @@ function parse(raw) {
       // answered with silence.
       hookEvent: j.hook_event_name || 'PreToolUse',
       summary: summarise({ tool: j.tool_name, command, paths }),
+      // Use Claude's description if provided, otherwise generate our own
+      description: claudeDescription || describeAction({ tool: j.tool_name, command, paths }),
     },
   };
 }

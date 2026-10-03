@@ -59,6 +59,7 @@ class ApprovalStore extends EventEmitter {
    * @param {string} [input.sessionId]   Agent session identifier.
    * @param {string} [input.toolUseId]   Agent's own call identifier.
    * @param {string} [input.summary]     Short human description.
+   * @param {string} [input.description] Human-readable action description.
    */
   create(input) {
     const { risk, reasons } = classify({
@@ -83,6 +84,7 @@ class ApprovalStore extends EventEmitter {
       sessionId: input.sessionId || null,
       toolUseId: input.toolUseId || null,
       summary: input.summary || null,
+      description: input.description || null,
       risk,
       riskReasons: reasons,
       status: STATUS.PENDING,
@@ -217,7 +219,9 @@ class ApprovalStore extends EventEmitter {
       command: req.command,
       cwd: req.cwd,
       project: req.project,
+      sessionId: req.sessionId,
       risk: req.risk,
+      riskReasons: req.riskReasons,
       deviceId,
       deviceLabel: deviceLabel || null,
       reason: reason || null,
@@ -243,8 +247,11 @@ class ApprovalStore extends EventEmitter {
       agent: req.agent,
       tool: req.tool,
       command: req.command,
+      cwd: req.cwd,
       project: req.project,
+      sessionId: req.sessionId,
       risk: req.risk,
+      riskReasons: req.riskReasons,
       reason: why,
       ttlMs: this.ttlMs,
     });
@@ -332,6 +339,7 @@ class ApprovalStore extends EventEmitter {
       project: req.project,
       sessionId: req.sessionId,
       summary: req.summary,
+      description: req.description,
       risk: req.risk,
       riskReasons: req.riskReasons,
       status: req.status,

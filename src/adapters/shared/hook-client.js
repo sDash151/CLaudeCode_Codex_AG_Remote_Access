@@ -67,6 +67,80 @@ function summarise({ tool, command, paths }) {
 }
 
 /**
+ * Generate a human-readable description of what the tool is doing.
+ */
+function describeAction({ tool, command, paths }) {
+  const t = String(tool || '').toLowerCase();
+  
+  // File operations
+  if (t === 'edit' || t === 'write' || t === 'multiedit' || t === 'replace') {
+    return 'Edit a file';
+  }
+  if (t === 'read' || t === 'view' || t === 'glob') {
+    return 'Read a file';
+  }
+  if (t === 'create_file') {
+    return 'Create a new file';
+  }
+  if (t === 'list_files' || t === 'ls') {
+    return 'List files';
+  }
+  if (t === 'search' || t === 'grep') {
+    return 'Search in files';
+  }
+  
+  // Shell commands
+  if (t === 'bash' || t === 'shell' || t === 'run_command' || t === 'execute') {
+    if (!command) return 'Run a shell command';
+    const cmd = command.toLowerCase();
+    
+    // Git operations
+    if (/\bgit\s+push\b/.test(cmd)) return 'Push to Git remote';
+    if (/\bgit\s+pull\b/.test(cmd)) return 'Pull from Git remote';
+    if (/\bgit\s+commit\b/.test(cmd)) return 'Create a Git commit';
+    if (/\bgit\s+merge\b/.test(cmd)) return 'Merge Git branches';
+    if (/\bgit\s+checkout\b/.test(cmd)) return 'Switch Git branch';
+    if (/\bgit\s+reset\b/.test(cmd)) return 'Reset Git state';
+    if (/\bgit\s+rebase\b/.test(cmd)) return 'Rebase Git history';
+    if (/\bgit\s+status\b/.test(cmd)) return 'Check Git status';
+    if (/\bgit\s+(diff|log|show)\b/.test(cmd)) return 'View Git history';
+    if (/\bgit\b/.test(cmd)) return 'Run Git command';
+    
+    // Package managers
+    if (/\b(npm|yarn|pnpm|bun)\s+(install|i|add)\b/.test(cmd)) return 'Install dependencies';
+    if (/\b(npm|yarn|pnpm|bun)\s+(test|run\s+test)\b/.test(cmd)) return 'Run tests';
+    if (/\b(npm|yarn|pnpm|bun)\s+run\s+build\b/.test(cmd)) return 'Build the project';
+    if (/\b(npm|yarn|pnpm|bun)\s+run\s+dev\b/.test(cmd)) return 'Start dev server';
+    
+    // Database
+    if (/\bprisma\s+migrate\b/.test(cmd)) return 'Run database migration';
+    if (/\bprisma\s+db\s+push\b/.test(cmd)) return 'Push database schema';
+    if (/\b(migrate|migration)\b/.test(cmd)) return 'Run database migration';
+    
+    // Docker
+    if (/\bdocker\s+(build|compose|run)\b/.test(cmd)) return 'Run Docker command';
+    
+    // File operations
+    if (/\b(rm|del|remove)\b/.test(cmd)) return 'Delete files';
+    if (/\b(cp|copy)\b/.test(cmd)) return 'Copy files';
+    if (/\b(mv|move)\b/.test(cmd)) return 'Move files';
+    if (/\b(mkdir|md)\b/.test(cmd)) return 'Create directory';
+    
+    // Read operations
+    if (/\b(ls|dir|cat|type|head|tail|less|grep|find)\b/.test(cmd)) return 'View files or directories';
+    
+    return 'Run a shell command';
+  }
+  
+  // Web operations
+  if (t === 'webfetch' || t === 'web_fetch') return 'Fetch from web';
+  if (t === 'websearch' || t === 'web_search') return 'Search the web';
+  
+  // Default fallback
+  return tool ? `Use ${tool} tool` : 'Perform an action';
+}
+
+/**
  * POST an approval request to the gateway and block until it resolves.
  *
  * Fail-closed by construction: every failure mode (no gateway, refused
@@ -177,4 +251,4 @@ function readStdin(limitBytes = 4 * 1024 * 1024) {
   });
 }
 
-module.exports = { projectNameFor, pathsFromToolInput, summarise, requestApproval, readStdin };
+module.exports = { projectNameFor, pathsFromToolInput, summarise, describeAction, requestApproval, readStdin };

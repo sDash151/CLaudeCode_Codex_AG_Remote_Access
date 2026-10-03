@@ -126,7 +126,9 @@ function renderRequest(req) {
   head.className = 'req__head';
   const agent = document.createElement('span');
   agent.className = 'req__agent';
-  agent.textContent = (AGENT_LABELS[req.agent] || req.agent) + ' wants to run…';
+  // Use the human-readable description if available
+  const actionText = req.description || 'run…';
+  agent.textContent = (AGENT_LABELS[req.agent] || req.agent) + ' wants to ' + actionText;
   const spacer = document.createElement('span');
   spacer.className = 'req__spacer';
   head.append(agent, spacer, riskPill(req.risk));
@@ -272,6 +274,7 @@ async function loadHistory() {
     for (const e of entries) {
       const li = document.createElement('li');
       li.className = 'req req--' + (e.risk || 'LOW');
+      
       const top = document.createElement('div');
       top.className = 'hist__top';
       const ev = document.createElement('span');
@@ -285,12 +288,50 @@ async function loadHistory() {
       t.textContent = new Date(e.ts).toLocaleString();
       top.append(ev, who, t);
       li.append(top);
+      
+      // Add command/description
       if (e.command || e.project) {
         const c = document.createElement('p');
         c.className = 'hist__cmd';
         c.textContent = [e.project ? '[' + e.project + ']' : null, e.command].filter(Boolean).join(' ');
         li.append(c);
       }
+      
+      // Add metadata details for request events
+      if (e.event && e.event.startsWith('request.')) {
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        
+        if (e.tool) {
+          const toolRow = metaRow('Tool', e.tool);
+          meta.append(toolRow);
+        }
+        if (e.cwd) {
+          const cwdRow = metaRow('Folder', e.cwd);
+          meta.append(cwdRow);
+        }
+        if (e.sessionId) {
+          const sessRow = metaRow('Session', e.sessionId);
+          meta.append(sessRow);
+        }
+        
+        if (meta.children.length > 0) {
+          li.append(meta);
+        }
+        
+        // Add risk reasons if available
+        if (e.riskReasons && Array.isArray(e.riskReasons) && e.riskReasons.length) {
+          const ul = document.createElement('ul');
+          ul.className = 'reasons';
+          for (const r of e.riskReasons) {
+            const item = document.createElement('li');
+            item.textContent = r;
+            ul.append(item);
+          }
+          li.append(ul);
+        }
+      }
+      
       list.append(li);
     }
     if (!entries.length) {
