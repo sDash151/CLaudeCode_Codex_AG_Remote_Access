@@ -68,14 +68,14 @@ function buildEntry(shimCommand) {
       {
         type: 'command',
         command,
-        timeout: 300,
+        timeout: 86400,
         _source: MARKER,
       },
     ],
     // Flattened form, for a reader that expects command/args on the entry.
     type: 'command',
     command,
-    timeout: 300,
+    timeout: 86400,
   };
 }
 

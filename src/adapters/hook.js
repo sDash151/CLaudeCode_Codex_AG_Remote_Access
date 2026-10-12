@@ -100,15 +100,17 @@ async function main() {
   const port = (runtime && runtime.port) || config.port;
   const host = (runtime && runtime.bindHost) || config.bindHost;
 
-  const result = await requestApproval({
-    host,
-    port,
-    secret: config.agentSecret,
-    payload: parsed.action,
-    // Give up slightly after the gateway's own wait window so the gateway is
-    // the component that decides, not our socket timeout.
-    timeoutMs: (config.agentWaitMs || 240000) + 15000,
-  });
+    // When hardNoTimer is enabled (default in approval mode) or full-auto, do not time out the socket.
+    const isNoTimer = config.hardNoTimer !== false || config.mode === 'auto' || config.agentWaitMs === 0;
+    const timeoutMs = isNoTimer ? 0 : (config.agentWaitMs || 240000) + 15000;
+
+    const result = await requestApproval({
+      host,
+      port,
+      secret: config.agentSecret,
+      payload: parsed.action,
+      timeoutMs,
+    });
 
   emit({ ...result, hookEvent });
 }

@@ -221,3 +221,35 @@ test('passthrough is not an approval — it carries no approved flag', () => {
   assert.equal(out.mode, 'passthrough');
   assert.equal(out.approved, undefined);
 });
+
+test('approval mode: medium auto-approved, hard gated with noTimer', () => {
+  const cfg = { mode: 'approval' };
+  const high = evaluate({ tool: 'Bash', command: 'git push origin main' }, cfg);
+  assert.equal(high.mode, 'gate');
+  assert.equal(high.risk, RISK.HIGH);
+  assert.equal(high.noTimer, true);
+
+  const med = evaluate({ tool: 'Bash', command: 'npm install left-pad' }, cfg);
+  assert.equal(med.mode, 'auto_approve');
+  assert.equal(med.risk, RISK.MEDIUM);
+  assert.equal(med.autoApproved, true);
+
+  const low = evaluate({ tool: 'Bash', command: 'git status' }, cfg);
+  assert.equal(low.mode, 'passthrough');
+  assert.equal(low.risk, RISK.LOW);
+});
+
+test('auto mode: all actions (low, medium, high) auto-approved with no timer', () => {
+  const cfg = { mode: 'auto' };
+  const high = evaluate({ tool: 'Bash', command: 'git push origin main' }, cfg);
+  assert.equal(high.mode, 'auto_approve');
+  assert.equal(high.autoApproved, true);
+
+  const med = evaluate({ tool: 'Bash', command: 'npm install left-pad' }, cfg);
+  assert.equal(med.mode, 'auto_approve');
+  assert.equal(med.autoApproved, true);
+
+  const low = evaluate({ tool: 'Bash', command: 'git status' }, cfg);
+  assert.equal(low.mode, 'auto_approve');
+  assert.equal(low.autoApproved, true);
+});

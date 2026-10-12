@@ -112,7 +112,7 @@ function buildHooksDoc(commandToken) {
             {
               type: 'command',
               command,
-              timeout: 300,
+              timeout: 86400,
             },
           ],
         },

@@ -50,6 +50,24 @@
     </nav>
   </header>
 
+  <div class="mode-bar">
+    <div class="mode-bar__header">
+      <span class="mode-bar__title">Gateway Mode</span>
+      <span id="mode-status-badge" class="mode-bar__status mode-bar__status--approval">Approval</span>
+    </div>
+    <div class="mode-toggle" role="group" aria-label="Gateway mode selection">
+      <button id="mode-btn-approval" class="mode-btn mode-btn--active" type="button" data-mode="approval">
+        🛡️ Approval
+      </button>
+      <button id="mode-btn-auto" class="mode-btn" type="button" data-mode="auto">
+        ⚡ Full Auto
+      </button>
+    </div>
+    <p id="mode-description" class="mode-bar__desc">
+      Medium auto-approved. Hard commands stay pending until you approve (no timer).
+    </p>
+  </div>
+
   <div id="push-nudge" class="notice" hidden>
     <p><strong>Enable notifications</strong> to be alerted when an agent asks for permission.</p>
     <button id="push-enable" class="btn btn--ghost">Enable notifications</button>

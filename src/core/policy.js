@@ -18,14 +18,36 @@ const { RISK, RISK_ORDER, classify } = require('./risk');
 
 /**
  * @param {object} action  {tool, command, paths}
- * @param {object} config  gateway config (uses gateMinRisk)
- * @returns {{mode: 'gate'|'passthrough', risk: string, reasons: string[]}}
+ * @param {object} config  gateway config (uses mode, hardNoTimer, gateMinRisk)
+ * @returns {{mode: 'gate'|'passthrough'|'auto_approve', risk: string, reasons: string[], noTimer?: boolean, autoApproved?: boolean}}
  */
 function evaluate(action, config = {}) {
   const { risk, reasons } = classify(action);
 
+  const mode = config.mode ? String(config.mode).toLowerCase() : null;
+
+  // Full Auto Mode: all commands (LOW, MEDIUM, HIGH) are auto-approved with no timer
+  if (mode === 'auto' || mode === 'full-auto') {
+    return { mode: 'auto_approve', risk, reasons, autoApproved: true, noTimer: true };
+  }
+
+  // Approval Mode:
+  // - Medium: approved by default (auto-approved)
+  // - Low: passthrough (auto-allowed)
+  // - Hard (HIGH): stays in approval with no timer until user accepts
+  if (mode === 'approval') {
+    if (risk === RISK.HIGH) {
+      return { mode: 'gate', risk, reasons, noTimer: config.hardNoTimer !== false };
+    }
+    if (risk === RISK.MEDIUM) {
+      return { mode: 'auto_approve', risk, reasons, autoApproved: true };
+    }
+    return { mode: 'passthrough', risk, reasons };
+  }
+
+  // Fallback for legacy configs / explicit gateMinRisk calls without mode:
   // Hard floor: HIGH is never passed through, whatever the config says.
-  if (risk === RISK.HIGH) return { mode: 'gate', risk, reasons };
+  if (risk === RISK.HIGH) return { mode: 'gate', risk, reasons, noTimer: Boolean(config.hardNoTimer) };
 
   const requested = String(config.gateMinRisk || 'MEDIUM').toUpperCase();
   // Clamp: MEDIUM is the highest permitted threshold. A config of "HIGH" would
@@ -33,7 +55,7 @@ function evaluate(action, config = {}) {
   // that only if explicitly set, but we never allow a threshold above HIGH.
   const threshold = RISK_ORDER[requested] === undefined ? RISK_ORDER.MEDIUM : RISK_ORDER[requested];
 
-  if (RISK_ORDER[risk] >= threshold) return { mode: 'gate', risk, reasons };
+  if (RISK_ORDER[risk] >= threshold) return { mode: 'gate', risk, reasons, noTimer: Boolean(config.hardNoTimer) };
   return { mode: 'passthrough', risk, reasons };
 }
 

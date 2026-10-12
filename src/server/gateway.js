@@ -126,6 +126,12 @@ class Gateway {
       });
     });
 
+    // Ensure Node does not time out long-running approval requests
+    this.server.requestTimeout = 0;
+    this.server.headersTimeout = 0;
+    this.server.keepAliveTimeout = 0;
+    this.server.timeout = 0;
+
     // Periodic housekeeping so finished requests do not accumulate.
     this._sweeper = setInterval(() => this.store.sweep(), 10 * 60 * 1000);
     if (this._sweeper.unref) this._sweeper.unref();
@@ -158,11 +164,34 @@ class Gateway {
       this.audit.append('agent.rejected', { reason: 'non_loopback_source', path: p });
       return send(res, 403, { error: 'forbidden' });
     }
+    if (req.socket) {
+      if (typeof req.socket.setTimeout === 'function') req.socket.setTimeout(0);
+      if (typeof req.socket.setKeepAlive === 'function') req.socket.setKeepAlive(true, 10000);
+    }
     const secret = req.headers['x-agw-agent-secret'];
     const { safeEqual } = require('../core/crypto');
     if (!secret || !safeEqual(secret, this.config.agentSecret)) {
       this.audit.append('agent.rejected', { reason: 'bad_agent_secret', path: p });
       return send(res, 401, { error: 'unauthorized' });
+    }
+
+    if (p === '/agent/mode') {
+      if (req.method === 'GET') {
+        return send(res, 200, { mode: this.config.mode || 'approval' });
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch { return send(res, 400, { error: 'bad_request' }); }
+        const newMode = (body.mode || '').toLowerCase();
+        if (newMode !== 'approval' && newMode !== 'auto' && newMode !== 'full-auto') {
+          return send(res, 400, { error: 'invalid_mode', message: 'Mode must be "approval" or "auto".' });
+        }
+        this.config.mode = newMode === 'full-auto' ? 'auto' : newMode;
+        saveConfig(this.config);
+        this._broadcast('mode', { mode: this.config.mode });
+        this.audit.append('mode.changed', { mode: this.config.mode, by: 'agent' });
+        return send(res, 200, { ok: true, mode: this.config.mode });
+      }
     }
 
     if (p === '/agent/approval' && req.method === 'POST') {
@@ -190,10 +219,10 @@ class Gateway {
         this.config
       );
 
-      // Below the gating threshold. Recorded so the audit log shows what was
-      // seen and why it was not sent to the phone.
-      if (decision.mode === 'passthrough') {
-        this.audit.append('request.passthrough', {
+      // Auto-approved or below the gating threshold.
+      if (decision.mode === 'passthrough' || decision.mode === 'auto_approve') {
+        const isAuto = decision.mode === 'auto_approve';
+        this.audit.append(isAuto ? 'request.auto_approved' : 'request.passthrough', {
           agent: action.agent,
           tool: action.tool,
           command: action.command,
@@ -201,14 +230,18 @@ class Gateway {
           project: action.project,
           risk: decision.risk,
           hookEvent: action.hookEvent || null,
-          note: 'Below gating threshold; allowed automatically so unattended work continues.',
+          note: isAuto
+            ? `Auto-approved by policy (${decision.risk} risk in ${this.config.mode || 'approval'} mode).`
+            : 'Below gating threshold; allowed automatically so unattended work continues.',
         });
         return send(res, 200, {
-          approved: false,
+          approved: isAuto ? true : false,
           mode: 'passthrough',
-          status: 'not_gated',
+          status: isAuto ? 'approved' : 'not_gated',
           risk: decision.risk,
-          reason: `Risk ${decision.risk} is below the ${this.config.gateMinRisk} gating threshold — allowed automatically.`,
+          reason: isAuto
+            ? `Auto-approved by policy (${decision.risk} risk in ${this.config.mode || 'approval'} mode)`
+            : `Risk ${decision.risk} is below the ${this.config.gateMinRisk} gating threshold — allowed automatically.`,
           requestId: null,
         });
       }
@@ -238,8 +271,12 @@ class Gateway {
         });
       }
 
-      const request = this.store.create(action);
-      const view = await this.store.waitForDecision(request.id, this.config.agentWaitMs);
+      const noTimer = decision.noTimer !== undefined
+        ? Boolean(decision.noTimer)
+        : (this.config.hardNoTimer !== false && decision.risk === 'HIGH');
+      const request = this.store.create({ ...action, noTimer });
+      const waitMs = noTimer ? 0 : this.config.agentWaitMs;
+      const view = await this.store.waitForDecision(request.id, waitMs);
 
       if (!view) {
         return send(res, 200, {
@@ -329,9 +366,29 @@ class Gateway {
     if (p === '/api/pending' && req.method === 'GET') {
       return send(res, 200, {
         pending: this.store.pending(),
+        mode: this.config.mode || 'approval',
         serverTime: this.now(),
         device: { deviceId: device.deviceId, label: device.label },
       });
+    }
+
+    if (p === '/api/mode') {
+      if (req.method === 'GET') {
+        return send(res, 200, { mode: this.config.mode || 'approval' });
+      }
+      if (req.method === 'POST') {
+        let body;
+        try { body = await readJsonBody(req); } catch { return send(res, 400, { error: 'bad_request' }); }
+        const newMode = (body.mode || '').toLowerCase();
+        if (newMode !== 'approval' && newMode !== 'auto' && newMode !== 'full-auto') {
+          return send(res, 400, { error: 'invalid_mode', message: 'Mode must be "approval" or "auto".' });
+        }
+        this.config.mode = newMode === 'full-auto' ? 'auto' : newMode;
+        saveConfig(this.config);
+        this._broadcast('mode', { mode: this.config.mode });
+        this.audit.append('mode.changed', { mode: this.config.mode, deviceId: device.deviceId, label: device.label });
+        return send(res, 200, { ok: true, mode: this.config.mode });
+      }
     }
 
     if (p === '/api/decide' && req.method === 'POST') {

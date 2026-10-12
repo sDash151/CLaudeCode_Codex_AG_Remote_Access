@@ -73,6 +73,8 @@ class ApprovalStore extends EventEmitter {
 
     const id = newRequestId();
     const createdAt = this.now();
+    const noTimer = input.noTimer === true;
+    const expiresAt = noTimer ? null : (createdAt + (input.ttlMs || this.ttlMs));
     const req = {
       id,
       agent: input.agent,
@@ -89,7 +91,8 @@ class ApprovalStore extends EventEmitter {
       riskReasons: reasons,
       status: STATUS.PENDING,
       createdAt,
-      expiresAt: createdAt + this.ttlMs,
+      expiresAt,
+      noTimer,
       decidedAt: null,
       decidedBy: null,
       decisionReason: null,
@@ -108,13 +111,16 @@ class ApprovalStore extends EventEmitter {
       sessionId: req.sessionId,
       risk: req.risk,
       riskReasons: req.riskReasons,
-      expiresAt: new Date(req.expiresAt).toISOString(),
+      expiresAt: req.expiresAt ? new Date(req.expiresAt).toISOString() : null,
+      noTimer,
     });
 
-    // Arm the expiry. unref() so a pending timer never holds the process open.
-    const timer = setTimeout(() => this.expire(id), this.ttlMs);
-    if (typeof timer.unref === 'function') timer.unref();
-    this._timers.set(id, timer);
+    // Arm the expiry only if a timer is active. unref() so a pending timer never holds the process open.
+    if (!noTimer && this.ttlMs > 0 && isFinite(this.ttlMs)) {
+      const timer = setTimeout(() => this.expire(id), input.ttlMs || this.ttlMs);
+      if (typeof timer.unref === 'function') timer.unref();
+      this._timers.set(id, timer);
+    }
 
     this.emit('created', this.publicView(req));
     return req;
@@ -127,8 +133,11 @@ class ApprovalStore extends EventEmitter {
   /** Requests still awaiting a decision, newest first. */
   pending() {
     const out = [];
+    const now = this.now();
     for (const req of this.requests.values()) {
-      if (req.status === STATUS.PENDING && this.now() < req.expiresAt) out.push(this.publicView(req));
+      if (req.status === STATUS.PENDING && (req.expiresAt === null || now < req.expiresAt)) {
+        out.push(this.publicView(req));
+      }
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
   }
@@ -188,8 +197,8 @@ class ApprovalStore extends EventEmitter {
       return { ok: false, code: 'already_decided', message: `Request already ${req.status}.` };
     }
 
-    // Expired by wall clock even if the timer has not fired yet.
-    if (this.now() >= req.expiresAt) {
+    // Expired by wall clock even if the timer has not fired yet (if request has an expiry).
+    if (req.expiresAt !== null && this.now() >= req.expiresAt) {
       this.expire(req.id, 'expired_before_decision');
       return { ok: false, code: 'expired', message: 'Request expired before a decision arrived.' };
     }
@@ -300,27 +309,28 @@ class ApprovalStore extends EventEmitter {
 
     return new Promise((resolve) => {
       let done = false;
+      let timer = null;
       const finish = (view) => {
         if (done) return;
         done = true;
         this.off('decided', onDecided);
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         resolve(view);
       };
       const onDecided = (view) => {
         if (view.id === id) finish(view);
       };
       this.on('decided', onDecided);
-      // NOT unref'd on purpose. A hook process is genuinely blocked on this
-      // timer; if it were unref'd the process could exit with the request still
-      // pending and no decision ever rendered.
-      const timer = setTimeout(() => {
-        // Our wait window elapsed. Force the request terminal so it cannot be
-        // approved after the agent has already given up.
-        this.expire(id, 'agent_wait_timeout');
-        const cur = this.requests.get(id);
-        finish(cur ? this.publicView(cur) : null);
-      }, waitMs);
+
+      // Only arm a wait timeout if waitMs > 0 and the request has an expiry.
+      // If req.expiresAt is null (no timer), we wait indefinitely for the user's decision.
+      if (req.expiresAt !== null && waitMs > 0 && isFinite(waitMs)) {
+        timer = setTimeout(() => {
+          this.expire(id, 'agent_wait_timeout');
+          const cur = this.requests.get(id);
+          finish(cur ? this.publicView(cur) : null);
+        }, waitMs);
+      }
     });
   }
 
@@ -345,6 +355,8 @@ class ApprovalStore extends EventEmitter {
       status: req.status,
       createdAt: req.createdAt,
       expiresAt: req.expiresAt,
+      ttlRemainingMs: req.expiresAt !== null ? Math.max(0, req.expiresAt - this.now()) : null,
+      noTimer: Boolean(req.noTimer),
       decidedAt: req.decidedAt,
       decidedBy: req.decidedBy,
       decisionReason: req.decisionReason,

@@ -63,7 +63,7 @@ function buildHandler() {
     type: 'command',
     command: process.execPath, // absolute path to this node binary
     args: [hookScriptPath(), 'claude'],
-    timeout: 300,
+    timeout: 86400,
     statusMessage: 'Waiting for remote approval…',
     // Marker so we can find and remove exactly our entry later.
     _source: HOOK_ENTRY_MARKER,
@@ -77,7 +77,12 @@ function stripOurs(groups) {
   for (const g of groups) {
     if (!g || !Array.isArray(g.hooks)) continue;
     const before = g.hooks.length;
-    g.hooks = g.hooks.filter((h) => !(h && h._source === HOOK_ENTRY_MARKER));
+    g.hooks = g.hooks.filter((h) => {
+      if (!h) return true;
+      if (h._source === HOOK_ENTRY_MARKER) return false;
+      if (Array.isArray(h.args) && h.args.some((a) => typeof a === 'string' && a.includes('hook.js'))) return false;
+      return true;
+    });
     removed += before - g.hooks.length;
   }
   return { groups: groups.filter((g) => g && Array.isArray(g.hooks) && g.hooks.length), removed };

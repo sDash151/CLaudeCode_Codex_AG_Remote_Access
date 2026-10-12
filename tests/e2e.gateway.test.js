@@ -32,6 +32,7 @@ test.before(async () => {
   cfg.port = 0;                 // let the OS pick a free port
   cfg.requestTtlMs = 4000;      // keep expiry tests quick
   cfg.agentWaitMs = 3000;
+  cfg.hardNoTimer = false;      // allow timeout test to test expiry
   saveConfig(cfg);
   gw = new Gateway({ config: cfg });
   const addr = await gw.listen();
@@ -486,4 +487,40 @@ test('static serving refuses path traversal', async () => {
   if (res.status === 200) {
     assert.ok(!/\[extensions\]/i.test(res.text), 'must not serve files outside the static dir');
   }
+});
+
+/* ------------------------------------------------------------- modes -- */
+
+test('gateway mode switching and auto-approval', async () => {
+  const token = await pairOverHttp('ModeTestPhone');
+  const headers = { authorization: 'Bearer ' + token };
+
+  // Initial mode is approval
+  const m1 = await request({ port, path: '/api/mode', headers });
+  assert.equal(m1.status, 200);
+  assert.equal(m1.body.mode, 'approval');
+
+  // In approval mode: MEDIUM risk commands are auto-approved
+  const medRes = await runHook('claude', hookPayload({ agent: 'claude', command: 'npm install left-pad' }));
+  assert.equal(medRes.decision, 'allow', 'MEDIUM commands must be auto-approved in approval mode');
+
+  // Switch to auto mode via phone API
+  const setAuto = await request({ port, method: 'POST', path: '/api/mode', headers, body: { mode: 'auto' } });
+  assert.equal(setAuto.status, 200);
+  assert.equal(setAuto.body.mode, 'auto');
+
+  // In auto mode: even HIGH commands are auto-approved
+  const highRes = await runHook('claude', hookPayload({ agent: 'claude', command: 'git push origin main' }));
+  assert.equal(highRes.decision, 'allow', 'HIGH commands must be auto-approved in auto mode');
+
+  // Switch back to approval mode via agent surface
+  const setAppr = await request({
+    port,
+    method: 'POST',
+    path: '/agent/mode',
+    headers: { 'x-agw-agent-secret': cfg.agentSecret },
+    body: { mode: 'approval' },
+  });
+  assert.equal(setAppr.status, 200);
+  assert.equal(setAppr.body.mode, 'approval');
 });

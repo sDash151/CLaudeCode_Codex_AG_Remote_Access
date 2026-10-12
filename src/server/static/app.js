@@ -16,6 +16,7 @@ const AGENT_LABELS = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Anti
 const state = {
   token: localStorage.getItem('agw_token') || null,
   pending: [],
+  mode: 'approval',
   connected: false,
   es: null,
   confirming: null,
@@ -157,10 +158,17 @@ function renderRequest(req) {
 
   const timeRow = document.createElement('p');
   timeRow.className = 'meta';
-  const cd = document.createElement('span');
-  cd.className = 'countdown';
-  cd.dataset.expires = String(req.expiresAt);
-  timeRow.append(document.createTextNode('Expires in '), cd);
+  if (req.expiresAt) {
+    const cd = document.createElement('span');
+    cd.className = 'countdown';
+    cd.dataset.expires = String(req.expiresAt);
+    timeRow.append(document.createTextNode('Expires in '), cd);
+  } else {
+    const waiting = document.createElement('span');
+    waiting.className = 'pill pill--waiting';
+    waiting.textContent = 'No timer — waiting for you';
+    timeRow.append(waiting);
+  }
   li.append(timeRow);
 
   const actions = document.createElement('div');
@@ -255,6 +263,7 @@ $('#confirm-go').onclick = () => {
 const HISTORY_LABELS = {
   'request.created': 'Requested',
   'request.approved': 'Approved',
+  'request.auto_approved': 'Auto-approved',
   'request.denied': 'Denied',
   'request.expired': 'Expired',
   'request.passthrough': 'Not gated (low risk)',
@@ -262,6 +271,7 @@ const HISTORY_LABELS = {
   'pairing.succeeded': 'Device paired',
   'pairing.failed': 'Pairing failed',
   'device.revoked': 'Device revoked',
+  'mode.changed': 'Mode changed',
   'gateway.started': 'Gateway started',
   'gateway.stopped': 'Gateway stopped',
 };
@@ -363,7 +373,9 @@ document.querySelectorAll('.tab').forEach((tab) => {
 function tickCountdowns() {
   const now = Date.now();
   document.querySelectorAll('.countdown').forEach((el) => {
+    if (!el.dataset.expires || el.dataset.expires === 'null') return;
     const ms = Number(el.dataset.expires) - now;
+    if (isNaN(ms)) return;
     if (ms <= 0) {
       el.textContent = 'expired';
       el.className = 'countdown countdown--critical';
@@ -386,6 +398,12 @@ function connectEvents() {
   state.es = es;
   es.addEventListener('hello', () => setConn('live', 'Connected to laptop'));
   es.addEventListener('ping', () => setConn('live', 'Connected to laptop'));
+  es.addEventListener('mode', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data && data.mode) updateModeUI(data.mode);
+    } catch {}
+  });
   es.addEventListener('created', (e) => {
     const req = JSON.parse(e.data);
     state.pending = [req, ...state.pending.filter((r) => r.id !== req.id)];
@@ -471,10 +489,55 @@ function urlBase64ToUint8Array(base64) {
 
 /* ------------------------------------------------------------------ start -- */
 
+function updateModeUI(mode) {
+  state.mode = mode || 'approval';
+  const badge = $('#mode-status-badge');
+  const btnApproval = $('#mode-btn-approval');
+  const btnAuto = $('#mode-btn-auto');
+  const desc = $('#mode-description');
+
+  if (state.mode === 'auto') {
+    if (badge) {
+      badge.textContent = 'Full Auto';
+      badge.className = 'mode-bar__status mode-bar__status--auto';
+    }
+    if (btnApproval) btnApproval.classList.remove('mode-btn--active');
+    if (btnAuto) btnAuto.classList.add('mode-btn--active');
+    if (desc) desc.textContent = '⚡ Full Auto: All commands (low, medium, hard) are auto-approved with no timer.';
+  } else {
+    if (badge) {
+      badge.textContent = 'Approval';
+      badge.className = 'mode-bar__status mode-bar__status--approval';
+    }
+    if (btnApproval) btnApproval.classList.add('mode-btn--active');
+    if (btnAuto) btnAuto.classList.remove('mode-btn--active');
+    if (desc) desc.textContent = '🛡️ Approval: Medium auto-approved. Hard commands stay pending until you approve (no timer).';
+  }
+}
+
+async function setGatewayMode(mode) {
+  if (!state.connected) return;
+  try {
+    const out = await api('/api/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    });
+    updateModeUI(out.mode);
+  } catch (ex) {
+    alert('Could not update gateway mode: ' + ex.message);
+  }
+}
+
+const btnModeApproval = $('#mode-btn-approval');
+if (btnModeApproval) btnModeApproval.onclick = () => setGatewayMode('approval');
+const btnModeAuto = $('#mode-btn-auto');
+if (btnModeAuto) btnModeAuto.onclick = () => setGatewayMode('auto');
+
 async function refresh() {
   try {
-    const { pending } = await api('/api/pending');
+    const { pending, mode } = await api('/api/pending');
     state.pending = pending;
+    if (mode) updateModeUI(mode);
     setConn('live', 'Connected to laptop');
     renderPending();
   } catch (ex) {

@@ -64,6 +64,14 @@ const DEFAULTS = {
 
   // Pairing code lifetime.
   pairingTtlMs: 10 * 60 * 1000,
+
+  // Operating mode:
+  //   'approval'  -> medium commands auto-approved, hard commands require remote approval (no timeout)
+  //   'auto'      -> full auto: all commands (low, medium, hard) auto-approved with no timer
+  mode: 'approval',
+
+  // For hard/HIGH risk commands in approval mode: never expire while waiting for remote approval.
+  hardNoTimer: true,
 };
 
 function writeJsonAtomic(file, data, mode = 0o600) {

@@ -343,3 +343,21 @@ test('the public view never leaks a nonce for a decided request', () => {
   store.decide({ requestId: req.id, nonce: req.nonce, decision: 'approve', deviceId: 'd' });
   assert.equal(store.publicView(store.get(req.id)).nonce, null);
 });
+
+test('noTimer: request has null expiresAt and never expires on wall clock', () => {
+  let now = 1000000;
+  const { store } = newStore({ ttlMs: 1000, clock: () => now });
+  const req = store.create({ ...BASE, noTimer: true });
+  assert.equal(req.expiresAt, null);
+  assert.equal(req.noTimer, true);
+  assert.equal(store.pending().length, 1);
+
+  // Advance time way past normal ttl
+  now += 10000000;
+  assert.equal(store.pending().length, 1, 'must still be pending after time elapsed');
+
+  // Can still be approved
+  const res = store.decide({ requestId: req.id, nonce: req.nonce, decision: 'approve', deviceId: 'dev_1' });
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'approved');
+});

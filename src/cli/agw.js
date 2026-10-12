@@ -193,8 +193,10 @@ async function status() {
     ok('stopped');
   }
   ok(`home      ${PATHS().home}`);
-  ok(`gate      requests at or above ${cfg.gateMinRisk} (HIGH always gated)`);
-  ok(`ttl       ${Math.round(cfg.requestTtlMs / 1000)}s per request, agent waits ${Math.round(cfg.agentWaitMs / 1000)}s`);
+  const curMode = cfg.mode || 'approval';
+  ok(`mode      ${curMode} (${curMode === 'auto' ? 'full auto: all actions auto-approved with no timer' : 'medium auto-approved, hard manual with no timer'})`);
+  ok(`gate      requests at or above ${cfg.gateMinRisk} (HIGH always gated in legacy; mode=${curMode})`);
+  ok(`ttl       ${cfg.hardNoTimer !== false ? 'no timeout for hard ones' : Math.round(cfg.requestTtlMs / 1000) + 's per request'}, agent waits ${Math.round(cfg.agentWaitMs / 1000)}s`);
   ok(`origin    ${cfg.publicOrigin || '(not set — run: agw set-origin https://host.ts.net)'}`);
 
   head('Hooks');
@@ -500,6 +502,7 @@ Agent Approval Gateway
   agw start [--foreground]        Start the gateway (detached by default)
   agw stop                        Stop it; anything pending is DENIED
   agw status [--project DIR]      Gateway, hook and device state
+  agw mode [approval|auto]        View or switch gateway mode
   agw pair                        Mint a one-time pairing code
   agw devices                     List paired devices
   agw revoke <id> | --all         Revoke device access
@@ -514,11 +517,75 @@ Data lives in ${PATHS().home}
 `);
 }
 
+async function modeCmd() {
+  const newMode = argv[1];
+  const cfg = loadConfig();
+  if (!newMode) {
+    const cur = cfg.mode || 'approval';
+    console.log(`Current gateway mode: ${cur}`);
+    if (cur === 'auto') {
+      console.log('  ⚡ Full Auto: all actions (low, medium, hard) are auto-approved with no timer.');
+    } else {
+      console.log('  🛡️ Approval: medium commands auto-approved, hard commands require manual approval (no timer).');
+    }
+    console.log('\nUsage: agw mode <approval|auto>');
+    return;
+  }
+
+  const m = newMode.toLowerCase();
+  if (m !== 'approval' && m !== 'auto' && m !== 'full-auto') {
+    console.error('Invalid mode. Choose "approval" or "auto".');
+    process.exitCode = 1;
+    return;
+  }
+  const normalized = m === 'full-auto' ? 'auto' : m;
+  cfg.mode = normalized;
+  saveConfig(cfg);
+
+  // If gateway is running, notify it live
+  const rt = loadRuntime();
+  if (rt && isAlive(rt.pid)) {
+    try {
+      const http = require('node:http');
+      await new Promise((resolve) => {
+        const req = http.request(
+          {
+            host: rt.bindHost || cfg.bindHost,
+            port: rt.port,
+            path: '/agent/mode',
+            method: 'POST',
+            headers: {
+              'x-agw-agent-secret': cfg.agentSecret,
+              'content-type': 'application/json',
+            },
+            timeout: 2000,
+          },
+          (res) => { res.resume(); resolve(); }
+        );
+        req.on('error', () => resolve());
+        req.on('timeout', () => { req.destroy(); resolve(); });
+        req.write(JSON.stringify({ mode: normalized }));
+        req.end();
+      });
+    } catch {
+      /* best effort */
+    }
+  }
+
+  console.log(`Gateway mode set to: ${normalized}`);
+  if (normalized === 'auto') {
+    console.log('  ⚡ Full Auto: all commands are auto-approved with no timer.');
+  } else {
+    console.log('  🛡️ Approval: medium commands auto-approved, hard commands require manual approval (no timer).');
+  }
+}
+
 (async () => {
   switch (cmd) {
     case 'start': return start();
     case 'stop': return stop();
     case 'status': return status();
+    case 'mode': return modeCmd();
     case 'pair': return pair();
     case 'devices': return devicesCmd();
     case 'revoke': return revoke();

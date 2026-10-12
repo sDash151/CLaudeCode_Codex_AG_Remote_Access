@@ -8,10 +8,10 @@ node_modules/
 .agw-dev/
 *.agw-backup
 
-# Machine-specific: holds absolute paths to locally installed tools
-.claude/settings.json
-.claude/settings.local.json
-.claude/launch.json
+# Machine-specific / IDE:
+.claude/
+.agents/
+skills-lock.json
 
 # Generated
 graphify-out/

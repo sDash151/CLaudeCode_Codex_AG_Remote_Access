@@ -152,65 +152,104 @@ function describeAction({ tool, command, paths }) {
 function requestApproval({ host, port, secret, payload, timeoutMs }) {
   return new Promise((resolve) => {
     const body = Buffer.from(JSON.stringify(payload), 'utf8');
-    const req = http.request(
-      {
-        host: host || '127.0.0.1',
-        port,
-        path: '/agent/approval',
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'content-length': body.length,
-          'x-agw-agent-secret': secret,
-        },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        let text = '';
-        res.setEncoding('utf8');
-        res.on('data', (c) => (text += c));
-        res.on('end', () => {
-          if (res.statusCode !== 200) {
-            return resolve({
-              approved: false,
-              status: 'denied',
-              reason: `Gateway returned HTTP ${res.statusCode}`,
-              requestId: null,
-            });
-          }
-          try {
-            const parsed = JSON.parse(text);
-            // Approval must be explicitly true. Anything else is a denial.
-            resolve({
-              approved: parsed.approved === true,
-              status: parsed.status || 'denied',
-              reason: parsed.reason || 'No reason supplied',
-              requestId: parsed.requestId || null,
-              mode: parsed.mode,
-            });
-          } catch {
-            resolve({
-              approved: false,
-              status: 'denied',
-              reason: 'Malformed response from approval gateway',
-              requestId: null,
-            });
-          }
-        });
-      }
-    );
+    const hasTimeout = typeof timeoutMs === 'number' && timeoutMs > 0;
 
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({
-        approved: false,
-        status: 'denied',
-        reason: 'Timed out waiting for a decision from the approval gateway',
-        requestId: null,
+    // Use an explicit Agent with keepAlive and timeout.
+    // In Node.js 24+, http.globalAgent defaults to timeout: 5000 (5 seconds).
+    // Bypassing globalAgent with an explicit agent and setting timeout: 0
+    // ensures Node 24 never kills long-running approval requests.
+    const agent = new http.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 10000,
+      timeout: hasTimeout ? timeoutMs : 0,
+    });
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try {
+        agent.destroy();
+      } catch {
+        /* ignore */
+      }
+      resolve(result);
+    };
+
+    const reqOpts = {
+      host: host || '127.0.0.1',
+      port,
+      path: '/agent/approval',
+      method: 'POST',
+      agent,
+      headers: {
+        'content-type': 'application/json',
+        'content-length': body.length,
+        'x-agw-agent-secret': secret,
+      },
+    };
+    if (hasTimeout) {
+      reqOpts.timeout = timeoutMs;
+    }
+
+    const req = http.request(reqOpts, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => (text += c));
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          return finish({
+            approved: false,
+            status: 'denied',
+            reason: `Gateway returned HTTP ${res.statusCode}`,
+            requestId: null,
+          });
+        }
+        try {
+          const parsed = JSON.parse(text);
+          // Approval must be explicitly true. Anything else is a denial.
+          finish({
+            approved: parsed.approved === true,
+            status: parsed.status || 'denied',
+            reason: parsed.reason || 'No reason supplied',
+            requestId: parsed.requestId || null,
+            mode: parsed.mode,
+          });
+        } catch {
+          finish({
+            approved: false,
+            status: 'denied',
+            reason: 'Malformed response from approval gateway',
+            requestId: null,
+          });
+        }
       });
     });
+
+    // Explicitly configure socket keep-alive and disarm any idle timeout
+    req.on('socket', (socket) => {
+      if (socket && typeof socket.setKeepAlive === 'function') {
+        socket.setKeepAlive(true, 10000);
+      }
+      if (!hasTimeout && socket && typeof socket.setTimeout === 'function') {
+        socket.setTimeout(0);
+      }
+    });
+
+    if (hasTimeout) {
+      req.on('timeout', () => {
+        req.destroy();
+        finish({
+          approved: false,
+          status: 'denied',
+          reason: 'Timed out waiting for a decision from the approval gateway',
+          requestId: null,
+        });
+      });
+    }
+
     req.on('error', (err) => {
-      resolve({
+      finish({
         approved: false,
         status: 'denied',
         reason: `Approval gateway unreachable (${err.code || err.message}) — denying by default`,
